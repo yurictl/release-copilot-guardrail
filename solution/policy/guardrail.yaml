@@ -1,0 +1,117 @@
+# Guardrail policy for inference-gateway.
+#
+# Single source of truth for every threshold the validator enforces. Values are
+# derived from Evidence C (application contract) and Evidence D (staging incident),
+# not from taste — each carries the evidence that produced it.
+#
+# Changing a number here is a policy change: it needs a reviewer from the service
+# owner AND the SRE on-call rota (see runbook.md, "Changing the guardrail itself").
+
+version: 1
+
+workload:
+  kind: Deployment
+  name: inference-gateway
+  namespace: production
+  container: gateway
+
+availability:
+  # Evidence C: "minimum safe production capacity is 3 healthy replicas during rollout".
+  min_healthy_replicas: 3
+  # Evidence D: rollout briefly ran with 2 available pods and p95 went 180ms -> 950ms.
+  # Enforced as: replicas - maxUnavailable >= min_healthy_replicas.
+  enforce_rollout_capacity: true
+
+probes:
+  # Evidence C: documented endpoints.
+  readiness_path: /ready
+  liveness_path: /live
+  # Paths that are dependency-aware by contract or by convention. Liveness must
+  # never point at one of these: Evidence D shows a pod restarting during a Redis
+  # brownout, which is a dependency failure, not a wedged process.
+  dependency_aware_paths:
+    - /ready
+    - /health
+    - /healthz
+    - /readyz
+  # Evidence C: "startup can take 20-40 seconds while model routing tables warm up".
+  startup_warmup_seconds: 40
+
+resources:
+  # Floor, not a target. Below this the service cannot serve its documented load;
+  # Evidence D ties the reduced request/limit set to the 3.8% 5xx spike and the
+  # p95 regression. A change that needs to go below the floor needs a load test
+  # attached to the PR and a policy change here, not an exception.
+  floor:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+secrets:
+  # These env vars must always come from a secret reference (valueFrom.secretKeyRef
+  # or a CSI/ExternalSecret-backed source). A literal `value:` is a blocking finding
+  # even if the literal itself looks harmless.
+  must_come_from_secret:
+    - REDIS_URL
+    - OPENAI_API_KEY
+    - MODEL_API_KEY
+    - DATABASE_URL
+  # Any env whose NAME matches these gets the same treatment.
+  sensitive_name_patterns:
+    - '(?i)(api[_-]?key|secret|token|password|passwd|credential|private[_-]?key)'
+  # Literal VALUES that look like credentials, wherever they appear in the document.
+  credential_value_patterns:
+    - name: openai-style-key
+      pattern: 'sk-[A-Za-z0-9_-]{6,}'
+    - name: aws-access-key-id
+      pattern: 'AKIA[0-9A-Z]{16}'
+    - name: github-token
+      pattern: 'gh[pousr]_[A-Za-z0-9]{20,}'
+    - name: slack-token
+      pattern: 'xox[abprs]-[A-Za-z0-9-]{10,}'
+    - name: private-key-block
+      pattern: '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+    - name: jwt
+      pattern: 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.'
+    - name: url-embedded-credentials
+      pattern: '[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:[^/\s@]+@'
+
+ci:
+  # Evidence E: `kubectl apply` runs in a job triggered by `pull_request`. Any fork
+  # PR (or any PR author) can then reach production credentials. Blocking.
+  forbid_write_verbs_on_triggers:
+    - pull_request
+    - pull_request_target
+  write_verb_patterns:
+    - 'kubectl\s+(apply|create|replace|patch|delete|scale|rollout\s+restart)'
+    - 'helm\s+(install|upgrade|uninstall|rollback)'
+    - 'kustomize\s+build[^|]*\|\s*kubectl\s+apply'
+    - 'argocd\s+app\s+(sync|set)'
+
+exceptions:
+  # Narrow, time-boxed waivers for live incidents. See solution/exceptions/README.md.
+  enabled: true
+  max_duration_hours: 24
+  min_approvers: 2
+  # An exception is only valid if at least one approver holds each required role.
+  required_approver_roles:
+    - sre-oncall
+    - service-owner
+  # Rules that can NEVER be waived: no incident justifies committing a credential.
+  non_waivable_rules:
+    - hardcoded-credential
+    - secret-downgrade
+
+scoring:
+  # Risk score for the machine-readable change summary (0-100, higher is worse).
+  block_weight: 20
+  warn_weight: 5
+  caveat_weight: 10
+  bands:
+    low: 0
+    medium: 20
+    high: 40
+    critical: 60

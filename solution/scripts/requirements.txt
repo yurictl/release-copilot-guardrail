@@ -1,0 +1,2 @@
+# The guardrail's only runtime dependency.
+PyYAML==6.0.2

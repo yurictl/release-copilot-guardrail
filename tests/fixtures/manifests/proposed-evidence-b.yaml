@@ -1,0 +1,52 @@
+# Evidence B — the proposed pull-request state (diff already applied).
+# This is the manifest the guardrail must reject.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-gateway
+  namespace: production
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 2
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: inference-gateway
+  template:
+    metadata:
+      labels:
+        app: inference-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.example.com/inference-gateway:2.5.0
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          env:
+            - name: MODEL_PROVIDER
+              value: "internal"
+            - name: REDIS_URL
+              value: "redis://cache.production.svc.cluster.local:6379"
+            - name: OPENAI_API_KEY
+              value: "sk-test-placeholder"

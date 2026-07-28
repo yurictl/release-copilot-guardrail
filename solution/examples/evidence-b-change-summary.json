@@ -1,0 +1,225 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-28T10:00:00+00:00",
+  "generated_by": "solution/scripts/validate_manifest.py",
+  "source": {
+    "manifest": "tests/fixtures/manifests/proposed-evidence-b.yaml",
+    "policy_version": 1
+  },
+  "workload": {
+    "kind": "Deployment",
+    "name": "inference-gateway",
+    "namespace": "production",
+    "images": {
+      "gateway": "registry.example.com/inference-gateway:2.5.0"
+    }
+  },
+  "risk": {
+    "score": 100,
+    "band": "critical",
+    "counts": {
+      "block": 12,
+      "caveat": 0,
+      "warn": 1
+    }
+  },
+  "capacity_change": {
+    "after": {
+      "replicas": 2,
+      "max_unavailable": 2,
+      "max_surge": 0,
+      "worst_case_available": 0,
+      "cpu_request_total_millicores": 200,
+      "memory_request_total_mib": 256
+    },
+    "before": {
+      "replicas": 4,
+      "max_unavailable": 1,
+      "max_surge": 1,
+      "worst_case_available": 3,
+      "cpu_request_total_millicores": 2000,
+      "memory_request_total_mib": 2048
+    },
+    "delta": {
+      "replicas": -2,
+      "worst_case_available_during_rollout": -3,
+      "cpu_request_total_millicores": -1800,
+      "memory_request_total_mib": -1792
+    }
+  },
+  "findings": [
+    {
+      "rule": "hardcoded-credential",
+      "severity": "BLOCK",
+      "category": "security",
+      "title": "credential-shaped literal (openai-style-key) in the manifest",
+      "detail": "Line 52 contains a value matching the openai-style-key pattern ('sk-tes***'). Treat it as compromised the moment it is pushed: it is in git history, in CI logs, and in every artifact rendered from this commit. A placeholder is not an exemption \u2014 placeholders get replaced with real values by the next person in a hurry, and the shape of the manifest is what teaches them where to put it.",
+      "evidence": "Evidence D: 'security scanner flagged a hard-coded API key pattern in the manifest'",
+      "remediation": "Remove the literal, reference a Secret via valueFrom.secretKeyRef, and rotate the credential if it was ever real.",
+      "location": "line 52"
+    },
+    {
+      "rule": "liveness-dependency-aware",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "livenessProbe points at a dependency-aware path '/health' (identical to the readiness path)",
+      "detail": "Liveness answers 'is this process wedged'; readiness answers 'can this pod serve traffic right now'. Wiring liveness to a dependency-aware endpoint converts a downstream brownout into a fleet-wide restart storm: every pod fails liveness at once, every pod is killed, and the cold-start penalty is paid on all of them simultaneously while the dependency is still degraded.",
+      "evidence": "Evidence C: 'liveness should not depend on Redis or model backends'; Evidence D: 'one pod restarted after failing liveness during Redis brownout'",
+      "remediation": "Point livenessProbe at /live and leave readiness on the dependency-aware path.",
+      "location": "container[gateway].livenessProbe.httpGet.path"
+    },
+    {
+      "rule": "probe-path-contract",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "livenessProbe path '/health' is not the documented '/live'",
+      "detail": "The application contract documents only /live, /ready and /metrics. '/health' is undocumented: it may 404 (every pod fails its probe and the rollout stalls or crash-loops) or it may exist with different semantics than this probe needs.",
+      "evidence": "Evidence C: documented endpoints GET /live, GET /ready, GET /metrics",
+      "remediation": "Set livenessProbe.httpGet.path back to /live.",
+      "location": "container[gateway].livenessProbe.httpGet.path"
+    },
+    {
+      "rule": "probe-path-contract",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "readinessProbe path '/health' is not the documented '/ready'",
+      "detail": "The application contract documents only /live, /ready and /metrics. '/health' is undocumented: it may 404 (every pod fails its probe and the rollout stalls or crash-loops) or it may exist with different semantics than this probe needs.",
+      "evidence": "Evidence C: documented endpoints GET /live, GET /ready, GET /metrics",
+      "remediation": "Set readinessProbe.httpGet.path back to /ready.",
+      "location": "container[gateway].readinessProbe.httpGet.path"
+    },
+    {
+      "rule": "replicas-floor",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "replicas (2) is below the documented safe floor (3)",
+      "detail": "Steady-state capacity would be 2 pods. The service is documented to need 3 healthy replicas, so a single node drain, eviction or crash takes the service below safe capacity with no rollout involved at all.",
+      "evidence": "Evidence C: 'minimum safe production capacity is 3 healthy replicas during rollout'",
+      "remediation": "Keep spec.replicas >= 3 (current production runs 4).",
+      "location": "spec.replicas"
+    },
+    {
+      "rule": "resource-floor",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "resources.limits.cpu '500m' is below the floor '1' on container 'gateway'",
+      "detail": "Cutting limits.cpu from 1 to 500m shrinks per-pod headroom at the same time as the replica count drops. For a memory limit this is an OOMKill risk under load; for CPU it is throttling that shows up as tail latency, not as an error.",
+      "evidence": "Evidence D: p95 latency 180ms -> 950ms, 5xx rate 3.8% after a similar change in staging",
+      "remediation": "Keep resources.limits.cpu >= 1, or attach a load test and change the floor in solution/policy/guardrail.yaml deliberately.",
+      "location": "container[gateway].resources.limits.cpu"
+    },
+    {
+      "rule": "resource-floor",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "resources.limits.memory '256Mi' is below the floor '1Gi' on container 'gateway'",
+      "detail": "Cutting limits.memory from 1Gi to 256Mi shrinks per-pod headroom at the same time as the replica count drops. For a memory limit this is an OOMKill risk under load; for CPU it is throttling that shows up as tail latency, not as an error.",
+      "evidence": "Evidence D: p95 latency 180ms -> 950ms, 5xx rate 3.8% after a similar change in staging",
+      "remediation": "Keep resources.limits.memory >= 1Gi, or attach a load test and change the floor in solution/policy/guardrail.yaml deliberately.",
+      "location": "container[gateway].resources.limits.memory"
+    },
+    {
+      "rule": "resource-floor",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "resources.requests.cpu '100m' is below the floor '500m' on container 'gateway'",
+      "detail": "Cutting requests.cpu from 500m to 100m shrinks per-pod headroom at the same time as the replica count drops. For a memory limit this is an OOMKill risk under load; for CPU it is throttling that shows up as tail latency, not as an error.",
+      "evidence": "Evidence D: p95 latency 180ms -> 950ms, 5xx rate 3.8% after a similar change in staging",
+      "remediation": "Keep resources.requests.cpu >= 500m, or attach a load test and change the floor in solution/policy/guardrail.yaml deliberately.",
+      "location": "container[gateway].resources.requests.cpu"
+    },
+    {
+      "rule": "resource-floor",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "resources.requests.memory '128Mi' is below the floor '512Mi' on container 'gateway'",
+      "detail": "Cutting requests.memory from 512Mi to 128Mi shrinks per-pod headroom at the same time as the replica count drops. For a memory limit this is an OOMKill risk under load; for CPU it is throttling that shows up as tail latency, not as an error.",
+      "evidence": "Evidence D: p95 latency 180ms -> 950ms, 5xx rate 3.8% after a similar change in staging",
+      "remediation": "Keep resources.requests.memory >= 512Mi, or attach a load test and change the floor in solution/policy/guardrail.yaml deliberately.",
+      "location": "container[gateway].resources.requests.memory"
+    },
+    {
+      "rule": "rollout-capacity",
+      "severity": "BLOCK",
+      "category": "availability",
+      "title": "rollout can drop to 0 available pod(s); floor is 3",
+      "detail": "replicas=2, maxUnavailable=2, maxSurge=0. Worst case during the rollout is 2 - 2 = 0 available pods before any new pod becomes ready, and with maxSurge=0 no replacement pod can even be created until an old one is torn down. With a documented 20-40s warm-up, that window is minutes, not seconds.",
+      "evidence": "Evidence D: 'rollout took 6m and briefly ran with 2 available pods', p95 180ms -> 950ms, 5xx 3.8%",
+      "remediation": "Require spec.replicas - maxUnavailable >= 3. Prefer a surge-only rollout for this service: maxUnavailable: 0, maxSurge: 2.",
+      "location": "spec.strategy.rollingUpdate"
+    },
+    {
+      "rule": "secret-downgrade",
+      "severity": "BLOCK",
+      "category": "security",
+      "title": "env OPENAI_API_KEY holds a literal value but must come from a secret",
+      "detail": "'OPENAI_API_KEY' is classified as sensitive by policy. A literal value here is readable by anyone with repo access or pod-read access in the namespace.",
+      "evidence": "Evidence B: REDIS_URL moved from secretKeyRef to a literal; Evidence D: 'security scanner flagged a hard-coded API key pattern'",
+      "remediation": "Restore valueFrom.secretKeyRef for OPENAI_API_KEY. If the value genuinely changed, rotate it in the secret store and reference the new key.",
+      "location": "container[gateway].env[OPENAI_API_KEY]"
+    },
+    {
+      "rule": "secret-downgrade",
+      "severity": "BLOCK",
+      "category": "security",
+      "title": "env REDIS_URL was a secretKeyRef and is now a plaintext value",
+      "detail": "The baseline sources this value from the 'inference-gateway-secrets' Secret. Inlining it moves the value into git history, into every rendered artifact, into CI logs and into `kubectl describe` output for anyone with pod-read access in the namespace. Rotation stops being a secret-store operation and becomes a code change, and the old value stays in git forever.",
+      "evidence": "Evidence B: REDIS_URL moved from secretKeyRef to a literal; Evidence D: 'security scanner flagged a hard-coded API key pattern'",
+      "remediation": "Restore valueFrom.secretKeyRef for REDIS_URL. If the value genuinely changed, rotate it in the secret store and reference the new key.",
+      "location": "container[gateway].env[REDIS_URL]"
+    },
+    {
+      "rule": "startup-grace",
+      "severity": "WARN",
+      "category": "operability",
+      "title": "liveness can kill container 'gateway' after ~30s, inside the documented 40s warm-up window",
+      "detail": "initialDelaySeconds=0 + periodSeconds=10 x failureThreshold=3 = 30s. A pod that takes the documented 40s to warm its routing tables is restarted before it ever becomes ready, producing a crash-loop that looks like an application bug. This is a pre-existing gap in the current manifest, not something this PR introduced.",
+      "evidence": "Evidence C: 'startup can take 20-40 seconds while model routing tables warm up'",
+      "remediation": "Add a startupProbe (e.g. periodSeconds: 5, failureThreshold: 18) so liveness only starts counting once the process is up.",
+      "location": "container[gateway].livenessProbe"
+    }
+  ],
+  "security_findings": [
+    {
+      "rule": "hardcoded-credential",
+      "severity": "BLOCK",
+      "category": "security",
+      "title": "credential-shaped literal (openai-style-key) in the manifest",
+      "detail": "Line 52 contains a value matching the openai-style-key pattern ('sk-tes***'). Treat it as compromised the moment it is pushed: it is in git history, in CI logs, and in every artifact rendered from this commit. A placeholder is not an exemption \u2014 placeholders get replaced with real values by the next person in a hurry, and the shape of the manifest is what teaches them where to put it.",
+      "evidence": "Evidence D: 'security scanner flagged a hard-coded API key pattern in the manifest'",
+      "remediation": "Remove the literal, reference a Secret via valueFrom.secretKeyRef, and rotate the credential if it was ever real.",
+      "location": "line 52"
+    },
+    {
+      "rule": "secret-downgrade",
+      "severity": "BLOCK",
+      "category": "security",
+      "title": "env OPENAI_API_KEY holds a literal value but must come from a secret",
+      "detail": "'OPENAI_API_KEY' is classified as sensitive by policy. A literal value here is readable by anyone with repo access or pod-read access in the namespace.",
+      "evidence": "Evidence B: REDIS_URL moved from secretKeyRef to a literal; Evidence D: 'security scanner flagged a hard-coded API key pattern'",
+      "remediation": "Restore valueFrom.secretKeyRef for OPENAI_API_KEY. If the value genuinely changed, rotate it in the secret store and reference the new key.",
+      "location": "container[gateway].env[OPENAI_API_KEY]"
+    },
+    {
+      "rule": "secret-downgrade",
+      "severity": "BLOCK",
+      "category": "security",
+      "title": "env REDIS_URL was a secretKeyRef and is now a plaintext value",
+      "detail": "The baseline sources this value from the 'inference-gateway-secrets' Secret. Inlining it moves the value into git history, into every rendered artifact, into CI logs and into `kubectl describe` output for anyone with pod-read access in the namespace. Rotation stops being a secret-store operation and becomes a code change, and the old value stays in git forever.",
+      "evidence": "Evidence B: REDIS_URL moved from secretKeyRef to a literal; Evidence D: 'security scanner flagged a hard-coded API key pattern'",
+      "remediation": "Restore valueFrom.secretKeyRef for REDIS_URL. If the value genuinely changed, rotate it in the secret store and reference the new key.",
+      "location": "container[gateway].env[REDIS_URL]"
+    }
+  ],
+  "exceptions": {
+    "applied": [],
+    "rejected": []
+  },
+  "required_approvals": [
+    "service-owner",
+    "sre-oncall",
+    "security-reviewer"
+  ],
+  "recommended_action": "reject",
+  "human_decision_required": true
+}

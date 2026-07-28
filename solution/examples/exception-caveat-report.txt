@@ -1,0 +1,13 @@
+guardrail: Deployment production/inference-gateway  (policy v1)
+
+[CAVEAT] rollout-capacity: rollout can drop to 2 available pod(s); floor is 3
+          at: spec.strategy.rollingUpdate
+          why: replicas=4, maxUnavailable=2, maxSurge=2. Worst case during the rollout is 4 - 2 = 2 available pods before any new pod becomes ready. With a documented 20-40s warm-up, that window is minutes, not seconds.
+     evidence: Evidence D: 'rollout took 6m and briefly ran with 2 available pods', p95 180ms -> 950ms, 5xx 3.8%
+          fix: Require spec.replicas - maxUnavailable >= 3. Prefer a surge-only rollout for this service: maxUnavailable: 0, maxSurge: 2.
+    exception: EXC-2026-07-28-01 (was BLOCK) — needs human sign-off
+
+risk score 10/100 (low)  blocking=0 caveat=1 warn=0
+capacity: replicas 4 -> 4, worst-case available during rollout 3 -> 2, cpu requests 2000m -> 2000m
+required approvals: service-owner, sre-oncall, incident-commander
+recommended action: approve-with-time-boxed-exception

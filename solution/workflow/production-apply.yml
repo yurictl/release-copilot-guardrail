@@ -1,0 +1,126 @@
+# The only path that writes to production. Deliberately separate from
+# pr-validate.yml: different trigger, different credentials, different approvers.
+#
+# Trust boundary, stated plainly:
+#   - triggered only by workflow_dispatch on a commit that is already on `main`
+#   - bound to the `production` GitHub Environment: required reviewers, wait timer,
+#     and branch restriction are configured there, not here (so a PR editing this
+#     file cannot loosen them)
+#   - short-lived OIDC credentials scoped to a role with write access to the
+#     `production` namespace only — no cluster-admin, no other namespace
+#   - re-runs the guardrail against the freshly rendered manifest before applying:
+#     the PR verdict is evidence, not a permit, and the merge base may have moved
+name: production-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA on main to deploy (must be the SHA the PR guardrail passed)"
+        required: true
+      change_summary_run_id:
+        description: "Run ID of the pr-validate run whose change-summary was approved"
+        required: true
+      reason:
+        description: "Why now — ticket or release ID"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write   # OIDC only; no long-lived cluster credential exists in this repo
+
+concurrency:
+  group: production-apply-inference-gateway
+  cancel-in-progress: false   # never interrupt a rollout in flight
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production      # <- required reviewers live here
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Refuse anything that is not an ancestor of main
+        run: |
+          git fetch --depth=50 origin main
+          git merge-base --is-ancestor "${{ inputs.sha }}" origin/main \
+            || { echo "::error::${{ inputs.sha }} is not on main"; exit 1; }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r solution/scripts/requirements.txt
+
+      - name: Render
+        run: |
+          curl -sSLo /tmp/kustomize.tgz https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz
+          tar -xzf /tmp/kustomize.tgz -C /usr/local/bin
+          kustomize build k8s/overlays/production > /tmp/rendered.yaml
+
+      - name: Guardrail (re-run — the PR verdict is evidence, not a permit)
+        run: |
+          python3 solution/scripts/validate_manifest.py \
+            --manifest /tmp/rendered.yaml \
+            --baseline k8s/production/deployment.yaml \
+            --policy solution/policy/guardrail.yaml \
+            --exceptions solution/exceptions \
+            --out /tmp/change-summary.json
+
+      - name: Guardrail (CI workflows)
+        run: python3 solution/scripts/validate_manifest.py --workflows .github/workflows
+
+      - name: Assume the deploy role (OIDC, short-lived)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PRODUCTION_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: 1800
+
+      - name: Diff against the live cluster (last chance to abort)
+        run: kubectl diff -f /tmp/rendered.yaml || true
+
+      - name: Apply
+        run: kubectl apply -f /tmp/rendered.yaml --record=false
+
+      - name: Watch the rollout
+        id: rollout
+        run: |
+          kubectl -n production rollout status deploy/inference-gateway --timeout=10m
+
+      - name: Post-apply health gate
+        # Availability floor is asserted from the cluster, not assumed from the manifest.
+        run: |
+          ready=$(kubectl -n production get deploy/inference-gateway -o jsonpath='{.status.readyReplicas}')
+          echo "readyReplicas=$ready"
+          [ "${ready:-0}" -ge 3 ] || { echo "::error::below the 3-replica floor"; exit 1; }
+
+      - name: Roll back on failure
+        if: failure() && steps.rollout.outcome != 'skipped'
+        run: |
+          kubectl -n production rollout undo deploy/inference-gateway
+          kubectl -n production rollout status deploy/inference-gateway --timeout=10m
+          echo "::error::rolled back to the previous ReplicaSet — see runbook.md 'Rollback'"
+
+      - name: Record the deployment
+        if: always()
+        run: |
+          jq -n --arg sha "${{ inputs.sha }}" \
+                --arg actor "${{ github.actor }}" \
+                --arg reason "${{ inputs.reason }}" \
+                --arg run "${{ inputs.change_summary_run_id }}" \
+                --arg result "${{ job.status }}" \
+                '{sha:$sha, actor:$actor, reason:$reason, approved_summary_run:$run, result:$result}' \
+            | tee /tmp/deployment-record.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-apply-record
+          path: |
+            /tmp/deployment-record.json
+            /tmp/change-summary.json
+            /tmp/rendered.yaml

@@ -1,0 +1,21 @@
+# Copy to EXC-<YYYY-MM-DD>-<n>.yaml. Every field is mandatory.
+# Validate before opening the PR:
+#   python3 solution/scripts/validate_manifest.py \
+#     --manifest <rendered.yaml> --baseline k8s/production/deployment.yaml \
+#     --exceptions solution/exceptions
+id: EXC-2026-01-01-01
+rule: rollout-capacity          # exactly one rule; see solution/policy/guardrail.yaml
+workload: production/inference-gateway
+incident: INC-0000              # a real ticket
+reason: >
+  Why the waived failure mode is acceptable right now, and what makes waiting worse
+  than proceeding. Written for the person reading the post-incident review, not for
+  the person approving in a hurry.
+requested_by: your.name
+approvers:                      # >= 2, must include sre-oncall AND service-owner,
+  - name: someone.else          # and must not include the requester
+    role: sre-oncall
+  - name: third.person
+    role: service-owner
+created_at: "2026-01-01T00:00:00Z"
+expires_at: "2026-01-01T04:00:00Z"   # <= 24h after created_at, absolute UTC

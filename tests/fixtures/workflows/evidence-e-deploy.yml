@@ -1,0 +1,16 @@
+# Evidence E — the existing CI workflow. Kept verbatim as a fixture so the
+# guardrail's ci-write-from-pr rule has something to fail against.
+name: deploy
+on:
+  pull_request:
+    paths:
+      - "k8s/**"
+jobs:
+  render-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render
+        run: kustomize build k8s/overlays/production > rendered.yaml
+      - name: Apply
+        run: kubectl apply -f rendered.yaml

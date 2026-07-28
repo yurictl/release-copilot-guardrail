@@ -1,0 +1,15 @@
+# A render that does not contain the target Deployment at all — a kustomize
+# misconfiguration, a renamed resource, or a truncated output. The guardrail must
+# fail closed (exit 2) rather than report "no findings".
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-gateway
+  namespace: production
+spec:
+  selector:
+    app: inference-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

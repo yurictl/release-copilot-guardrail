@@ -1,0 +1,72 @@
+# The version of the Evidence B change that the guardrail passes with zero findings.
+# It keeps the one thing the PR legitimately wanted (image 2.4.1 -> 2.5.0) and drops
+# every change that traded availability or secret hygiene for it.
+#
+# Differences from the current baseline (k8s/production/deployment.yaml):
+#   - image bumped to 2.5.0                         (the intended change)
+#   - maxSurge 1 -> 2, maxUnavailable 1 -> 0        (surge-only rollout: 4 healthy throughout)
+#   - startupProbe added                            (covers the documented 20-40s warm-up)
+#   - livenessProbe failureThreshold made explicit  (kills only a truly wedged process)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-gateway
+  namespace: production
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: inference-gateway
+  template:
+    metadata:
+      labels:
+        app: inference-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.example.com/inference-gateway:2.5.0
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 18        # 90s budget for a documented 20-40s warm-up
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          env:
+            - name: MODEL_PROVIDER
+              value: "internal"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: inference-gateway-secrets
+                  key: redis_url
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: inference-gateway-secrets
+                  key: openai_api_key

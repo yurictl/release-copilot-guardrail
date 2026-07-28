@@ -1,0 +1,16 @@
+# Attempts to waive a credential finding. Rejected unconditionally: no incident
+# makes committing a secret acceptable, and "we'll rotate it later" is how a
+# temporary key becomes a permanent one.
+id: EXC-2026-07-28-03
+rule: hardcoded-credential
+workload: production/inference-gateway
+incident: INC-4471
+reason: Vault is unreachable, need the key inline for one deploy.
+requested_by: r.okafor
+approvers:
+  - name: s.delacroix
+    role: sre-oncall
+  - name: m.haruna
+    role: service-owner
+created_at: "2026-07-28T09:00:00Z"
+expires_at: "2026-07-28T13:00:00Z"

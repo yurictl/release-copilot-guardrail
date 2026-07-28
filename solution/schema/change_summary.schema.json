@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/inference-gateway/change_summary-1.0.0.json",
+  "title": "Production change summary",
+  "description": "Machine-readable verdict produced by solution/scripts/validate_manifest.py --format json. Intended to be read by an approver in under a minute, and by tooling (release dashboards, audit export) without parsing prose. It states what the guardrail found; it never states that a change is approved — that field does not exist, because approval is a human act recorded in the GitHub Environment.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "generated_by",
+    "workload",
+    "risk",
+    "findings",
+    "required_approvals",
+    "recommended_action",
+    "human_decision_required"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "generated_by": { "type": "string", "description": "Tool that produced this summary. A summary with no provenance is an opinion." },
+    "source": {
+      "type": "object",
+      "properties": {
+        "manifest": { "type": ["string", "null"] },
+        "policy_version": { "type": ["integer", "string", "null"] }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["kind", "name", "namespace"],
+      "properties": {
+        "kind": { "type": "string" },
+        "name": { "type": "string" },
+        "namespace": { "type": "string" },
+        "images": {
+          "type": "object",
+          "description": "container name -> image reference",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["score", "band", "counts"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "band": { "enum": ["low", "medium", "high", "critical"] },
+        "counts": {
+          "type": "object",
+          "required": ["block", "caveat", "warn"],
+          "properties": {
+            "block": { "type": "integer", "minimum": 0 },
+            "caveat": { "type": "integer", "minimum": 0 },
+            "warn": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "capacity_change": {
+      "type": "object",
+      "description": "Absent when no manifest was evaluated; 'before'/'delta' absent when no baseline was supplied.",
+      "properties": {
+        "before": { "$ref": "#/$defs/capacity" },
+        "after": { "$ref": "#/$defs/capacity" },
+        "delta": {
+          "type": "object",
+          "properties": {
+            "replicas": { "type": "integer" },
+            "worst_case_available_during_rollout": { "type": "integer" },
+            "cpu_request_total_millicores": { "type": "integer" },
+            "memory_request_total_mib": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "security_findings": {
+      "type": "array",
+      "description": "Subset of findings in the security / supply-chain categories, duplicated so a security reviewer can read one field.",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "exceptions": {
+      "type": "object",
+      "properties": {
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "rule", "incident", "expires_at", "approvers"],
+            "properties": {
+              "id": { "type": "string" },
+              "rule": { "type": "string" },
+              "incident": { "type": "string" },
+              "expires_at": { "type": "string" },
+              "approvers": { "type": "array", "items": { "type": "string" } },
+              "findings_downgraded": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "rejected": {
+          "type": "array",
+          "description": "Exception records that did not hold. Recorded rather than dropped: an invalid waiver is an audit event.",
+          "items": {
+            "type": "object",
+            "required": ["id", "reason"],
+            "properties": {
+              "id": { "type": "string" },
+              "file": { "type": "string" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "required_approvals": {
+      "type": "array",
+      "description": "Roles that must sign off, derived from the categories of the findings.",
+      "items": { "enum": ["service-owner", "sre-oncall", "security-reviewer", "incident-commander"] }
+    },
+    "recommended_action": {
+      "description": "A recommendation to a human, never an instruction to a system.",
+      "enum": ["approve", "approve-with-conditions", "approve-with-time-boxed-exception", "reject"]
+    },
+    "human_decision_required": {
+      "type": "boolean",
+      "const": true,
+      "description": "Structural reminder that no value of recommended_action authorises an apply."
+    }
+  },
+  "$defs": {
+    "capacity": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": ["integer", "null"] },
+        "max_unavailable": { "type": ["integer", "null"] },
+        "max_surge": { "type": ["integer", "null"] },
+        "worst_case_available": { "type": ["integer", "null"] },
+        "cpu_request_total_millicores": { "type": ["integer", "null"] },
+        "memory_request_total_mib": { "type": ["integer", "null"] }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["rule", "severity", "category", "title", "detail", "evidence", "remediation"],
+      "properties": {
+        "rule": {
+          "enum": [
+            "replicas-floor",
+            "rollout-capacity",
+            "probe-path-contract",
+            "liveness-dependency-aware",
+            "startup-grace",
+            "resource-floor",
+            "secret-downgrade",
+            "hardcoded-credential",
+            "ci-write-from-pr"
+          ]
+        },
+        "severity": { "enum": ["BLOCK", "WARN", "CAVEAT"] },
+        "category": { "enum": ["availability", "security", "operability", "supply-chain"] },
+        "title": { "type": "string" },
+        "detail": { "type": "string" },
+        "evidence": { "type": "string", "description": "The observation this conclusion rests on — a manifest field, a documented contract line, or a staging measurement." },
+        "remediation": { "type": "string" },
+        "location": { "type": "string" },
+        "exception_id": { "type": "string" },
+        "original_severity": { "enum": ["BLOCK", "WARN"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+guardrail: Deployment production/inference-gateway  (policy v1)
+
+No findings. All checks passed.
+risk score 0/100 (low)  blocking=0 caveat=0 warn=0
+capacity: replicas 4 -> 4, worst-case available during rollout 3 -> 4, cpu requests 2000m -> 2000m
+required approvals: service-owner
+recommended action: approve

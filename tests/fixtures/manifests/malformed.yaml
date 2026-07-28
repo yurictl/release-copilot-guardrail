@@ -1,0 +1,7 @@
+# Deliberately invalid YAML: unbalanced brackets in a flow mapping.
+# Must produce exit 2 (cannot evaluate), never exit 0.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: inference-gateway, namespace: production
+spec:
+  replicas: 4

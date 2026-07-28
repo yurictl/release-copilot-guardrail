@@ -1,0 +1,11 @@
+guardrail: Deployment production/inference-gateway  (policy v1)
+
+[BLOCK]  ci-write-from-pr: evidence-e-deploy.yml runs a cluster-write command in a pull_request-triggered workflow
+          at: evidence-e-deploy.yml:16
+          why: Line 16: `run: kubectl apply -f rendered.yaml`. A pull-request job holds production credentials, so merge review is not the control point any more — opening a PR is. The change applies before anyone approves it, and on `pull_request_target` the code deciding what to apply comes from the PR branch itself.
+     evidence: Evidence E: the `deploy` workflow runs `kubectl apply -f rendered.yaml` on `pull_request`
+          fix: Split the pipeline: the PR job renders, validates and posts a plan with no cluster credentials; production apply moves to a separate workflow_dispatch/push-to-main job bound to a protected GitHub Environment with required reviewers.
+
+risk score 20/100 (medium)  blocking=1 caveat=0 warn=0
+required approvals: security-reviewer
+recommended action: reject
