@@ -150,39 +150,59 @@ class Precision(unittest.TestCase):
 
 
 class Rendering(unittest.TestCase):
-    """What the guardrail checks must be what would actually be applied."""
+    """The baseline fixture must be what the *deployed* state renders to.
 
-    def _render(self):
-        proc = subprocess.run([RENDER], capture_output=True, text=True)
-        if proc.returncode == 2 and "need kustomize or kubectl" in proc.stderr:
-            self.skipTest("neither kustomize nor kubectl on PATH")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        return proc.stdout
+    Scoped to the default branch on purpose. A PR branch is expected to render
+    differently — that difference is the change under review, and judging it is the
+    guardrail job's business, not this test's. A parity check against the working
+    tree would turn every legitimate manifest PR red for the wrong reason.
+    """
 
-    def test_overlay_renders_to_the_committed_baseline(self):
+    def _render_default_branch(self):
+        for ref in ("origin/main", "main"):
+            if subprocess.run(
+                ["git", "-C", ROOT, "rev-parse", "--verify", "--quiet", ref],
+                capture_output=True,
+            ).returncode == 0:
+                break
+        else:
+            self.skipTest("no main/origin/main ref in this checkout")
+
+        import tempfile
+
+        work = tempfile.mkdtemp(prefix="guardrail-baseline-")
+        os.rmdir(work)  # git worktree wants to create it
+        add = subprocess.run(
+            ["git", "-C", ROOT, "worktree", "add", "--detach", work, ref],
+            capture_output=True,
+            text=True,
+        )
+        if add.returncode != 0:
+            self.skipTest(f"could not create a worktree for {ref}: {add.stderr.strip()}")
+        try:
+            proc = subprocess.run([RENDER, work], capture_output=True, text=True)
+            if proc.returncode == 2 and "need kustomize or kubectl" in proc.stderr:
+                self.skipTest("neither kustomize nor kubectl on PATH")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return proc.stdout
+        finally:
+            subprocess.run(
+                ["git", "-C", ROOT, "worktree", "remove", "--force", work],
+                capture_output=True,
+            )
+
+    def test_baseline_fixture_matches_what_the_default_branch_renders(self):
         """A stale snapshot would make every diff-aware check compare against fiction."""
-        rendered = self._render()
+        rendered = self._render_default_branch()
         with open(BASELINE, encoding="utf-8") as fh:
             committed = "".join(line for line in fh if not line.startswith("# "))
         self.assertEqual(
             rendered,
             committed,
-            "tests/fixtures/manifests/baseline-evidence-a.yaml has drifted from "
-            "k8s/overlays/production — regenerate it (see the header in that file)",
+            "tests/fixtures/manifests/baseline-evidence-a.yaml has drifted from what "
+            "k8s/overlays/production renders on the default branch — regenerate it "
+            "(see the header in that file)",
         )
-
-    def test_rendered_overlay_is_clean(self):
-        rendered = self._render()
-        import tempfile
-
-        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as fh:
-            fh.write(rendered)
-            path = fh.name
-        try:
-            result, _ = evaluate(path)
-            self.assertEqual(rules(result, guardrail.BLOCK), [])
-        finally:
-            os.unlink(path)
 
 
 class IndividualRules(unittest.TestCase):

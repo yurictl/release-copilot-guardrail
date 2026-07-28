@@ -27,7 +27,7 @@ Start here:
 | [`solution/schema/change_summary.schema.json`](solution/schema/change_summary.schema.json) | The machine-readable approver summary |
 | [`solution/exceptions/`](solution/exceptions/README.md) | The time-boxed exception mechanism |
 | [`solution/examples/`](solution/examples) | Real output from the commands below, checked in |
-| [`tests/`](tests) | 39 tests: catch tests, precision tests, fail-closed tests, render-parity |
+| [`tests/`](tests) | 38 tests: catch tests, precision tests, fail-closed tests, render-parity |
 | [`AI_USAGE.md`](AI_USAGE.md) | What the AI produced, what I changed, what I rejected, how each claim was verified |
 
 ---
@@ -59,7 +59,7 @@ Start here:
 
 **Should attempt**
 
-5. **Tests / example failures** — `./validate.sh`, `tests/test_validate.py` (39 tests),
+5. **Tests / example failures** — `./validate.sh`, `tests/test_validate.py` (38 tests),
    `solution/examples/*`.
 6. **Pipeline split** — `.github/workflows/pr-validate.yml` +
    `production-apply.yml`, replacing the Evidence E workflow. Installed and running in
@@ -138,7 +138,7 @@ files, not admission objects). Longer term this belongs in **both** places: CI f
 feedback, and a Kyverno/Gatekeeper admission policy so the cluster refuses the change
 regardless of how it arrives — CI checks the path you know about.
 
-**Precision is tested, not assumed.** Five of the 39 tests assert that the *current*
+**Precision is tested, not assumed.** Four of the 38 tests assert that the *current*
 production manifest, the *remediated* change and the repo's own workflows produce no
 blocking findings. A guardrail measured only on what it catches scores perfectly by
 flagging everything, and then gets bypassed within a month.
