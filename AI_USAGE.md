@@ -132,7 +132,8 @@ clean run would be the least useful possible answer.
   this repository and were exercised end to end: [PR #1](https://github.com/yurictl/release-copilot-guardrail/pull/1) is blocked by the
   guardrail, [PR #2](https://github.com/yurictl/release-copilot-guardrail/pull/2) passes it, and `production-apply.yml` runs through the
   environment approval, the ancestor check, the render and both guardrail re-runs before
-  stopping at the unconfigured-cluster boundary. This section previously said the
+  stopping at the unconfigured-cluster boundary ([run](https://github.com/yurictl/release-copilot-guardrail/actions/runs/30330547519) — the
+  approval is recorded on it, and the apply steps show as skipped rather than passed). This section previously said the
   workflows had never executed; that was true when it was written, and running them
   changed two things — see "What I changed" items 10 and 11.
 - **No cluster behaviour was verified** — by the exercise's own terms, but it bears

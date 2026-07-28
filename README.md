@@ -190,6 +190,17 @@ requests carry the same release through it:
 | [PR #1](https://github.com/yurictl/release-copilot-guardrail/pull/1) — the Evidence B change, applied verbatim | **Blocked.** `render + guardrail` fails; the guardrail comments 12 blocking findings, risk 100/100, `reject`. `guardrail self-test` stays green — one red X, for the right reason |
 | [PR #2](https://github.com/yurictl/release-copilot-guardrail/pull/2) — the same release, image bump only | **Passes.** No findings, risk 0/100, `approve` — and the comment still says a human owns the merge |
 | [Actions](https://github.com/yurictl/release-copilot-guardrail/actions) | Both runs, with the rendered manifest and the JSON change summary attached as artifacts |
+| [Apply run #30330547519](https://github.com/yurictl/release-copilot-guardrail/actions/runs/30330547519) | `production-apply` dispatched against `main`. Paused at the `production` environment gate until a named human approved it, then ran the ancestor check, the render and both guardrail re-runs, and **stopped before the apply** because no cluster is configured |
+
+Controls actually configured on this repository, not just described:
+
+- **Branch protection on `main`** — `guardrail self-test` and `render + guardrail` are
+  required status checks, `strict` (branch must be current), `enforce_admins: true`, no
+  force pushes. PR #1 cannot be merged; PR #2 can.
+- **The `production` environment** — required reviewer, and deployments restricted to
+  protected branches. The dispatch above sat in "Waiting" until that reviewer approved.
+- Both are configured in GitHub rather than in a file, so a pull request cannot loosen
+  them. That is the point of putting them there.
 
 | Artifact | Status |
 |---|---|
@@ -198,7 +209,7 @@ requests carry the same release through it:
 | Fail-closed paths | Executed — exit 2 confirmed for malformed YAML, missing workload, missing baseline, missing workflow dir |
 | Change summary | Generated and checked field-by-field against the JSON schema by test |
 | `.github/workflows/pr-validate.yml` | **Executed on real pull requests** — render, both guardrail passes, artifact upload, PR comment, and the enforce step, on a blocking PR and a clean one |
-| `.github/workflows/production-apply.yml` | **Executed** through the environment approval, ancestor check, render and both guardrail re-runs. Stops before the apply: no cluster is configured |
+| `.github/workflows/production-apply.yml` | **Executed** ([run](https://github.com/yurictl/release-copilot-guardrail/actions/runs/30330547519)) through the environment approval, ancestor check, render and both guardrail re-runs. Stopped before the apply: no cluster is configured |
 | `kubectl apply` / rollout watch / rollback steps | **Not executed** — they need a cluster. Reviewed design, unexercised code |
 | Cluster behaviour | **Not verified** — no cluster, per the exercise |
 
