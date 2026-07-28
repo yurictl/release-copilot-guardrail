@@ -13,4 +13,4 @@ labels:
 # and the reviewer both want.
 images:
   - name: registry.example.com/inference-gateway
-    newTag: "2.4.1"
+    newTag: "2.5.0"

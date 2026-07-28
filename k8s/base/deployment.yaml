@@ -13,8 +13,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
+      maxUnavailable: 0
+      maxSurge: 2
   selector:
     matchLabels:
       app: inference-gateway
@@ -29,6 +29,12 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 18        # 90s budget for a documented 20-40s warm-up
           readinessProbe:
             httpGet:
               path: /ready
@@ -39,6 +45,7 @@ spec:
               path: /live
               port: http
             periodSeconds: 10
+            failureThreshold: 3
           resources:
             requests:
               cpu: "500m"
