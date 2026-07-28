@@ -1,0 +1,60 @@
+# GENERATED — do not edit by hand.
+# Snapshot of ./scripts/render.sh on main: the currently-deployed state (Evidence A).
+# Regenerate: ./scripts/render.sh >> a fresh copy of this header.
+# tests/test_validate.py asserts this still matches the overlay, so it cannot drift silently.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/name: inference-gateway
+  name: inference-gateway
+  namespace: production
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: inference-gateway
+      app.kubernetes.io/name: inference-gateway
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: inference-gateway
+        app.kubernetes.io/name: inference-gateway
+    spec:
+      containers:
+      - env:
+        - name: MODEL_PROVIDER
+          value: internal
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              key: redis_url
+              name: inference-gateway-secrets
+        image: registry.example.com/inference-gateway:2.4.1
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: http
+          periodSeconds: 10
+        name: gateway
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi

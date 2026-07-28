@@ -36,7 +36,7 @@ review *faster*; the guardrail makes it *safe*.
 **Access model:** a read-only GitHub token scoped to this repository, no cloud
 credentials, no `kubectl`, no shell, no network egress beyond the model API. Not "an
 agent we ask nicely" — a token that cannot write, in a job that cannot assume the deploy
-role. The PR-validation job (`solution/workflow/pr-validate.yml`) is already built this
+role. The PR-validation job (`.github/workflows/pr-validate.yml`) is already built this
 way and is the only job the assistant runs in.
 
 ## What it is explicitly not allowed to do
@@ -75,7 +75,7 @@ can be read together. Every claim carries the observation it rests on:
 #### Agreed with the guardrail (3 of 12 explained further)
 - **rollout-capacity** — with `replicas: 2` / `maxUnavailable: 2` / `maxSurge: 0`,
   the rollout can reach 0 available pods.
-  *Evidence:* the three fields above, in the diff at `k8s/production/deployment.yaml:8-14`.
+  *Evidence:* the three fields above, in the diff at `k8s/base/deployment.yaml:8-14`.
   *Confidence: high — arithmetic from the manifest.*
 
 #### Additional observations (NOT enforced by any policy)

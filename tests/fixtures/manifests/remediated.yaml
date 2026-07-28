@@ -2,7 +2,7 @@
 # It keeps the one thing the PR legitimately wanted (image 2.4.1 -> 2.5.0) and drops
 # every change that traded availability or secret hygiene for it.
 #
-# Differences from the current baseline (k8s/production/deployment.yaml):
+# Differences from the current baseline (tests/fixtures/manifests/baseline-evidence-a.yaml):
 #   - image bumped to 2.5.0                         (the intended change)
 #   - maxSurge 1 -> 2, maxUnavailable 1 -> 0        (surge-only rollout: 4 healthy throughout)
 #   - startupProbe added                            (covers the documented 20-40s warm-up)

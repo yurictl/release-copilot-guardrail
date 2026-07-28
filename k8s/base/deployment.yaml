@@ -1,10 +1,13 @@
-# Evidence A — current production Deployment (the approved baseline).
-# The guardrail treats this file as the `--baseline` for diff-aware checks.
+# Evidence A — the currently-deployed Deployment.
+#
+# The namespace comes from the overlay (k8s/overlays/production), so this file is
+# the shape of the workload and the overlay decides where it lands. The guardrail
+# never reads this file directly in CI: it reads what `kustomize build` produces,
+# because that is what would actually be applied.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inference-gateway
-  namespace: production
 spec:
   replicas: 4
   strategy:

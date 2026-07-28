@@ -25,8 +25,9 @@ SCRIPT = os.path.join(ROOT, "solution", "scripts", "validate_manifest.py")
 POLICY = os.path.join(ROOT, "solution", "policy", "guardrail.yaml")
 SCHEMA = os.path.join(ROOT, "solution", "schema", "change_summary.schema.json")
 FIXTURES = os.path.join(ROOT, "tests", "fixtures")
-BASELINE = os.path.join(ROOT, "k8s", "production", "deployment.yaml")
-REMEDIATED = os.path.join(ROOT, "k8s", "production", "deployment.remediated.yaml")
+BASELINE = os.path.join(FIXTURES, "manifests", "baseline-evidence-a.yaml")
+REMEDIATED = os.path.join(FIXTURES, "manifests", "remediated.yaml")
+RENDER = os.path.join(ROOT, "scripts", "render.sh")
 
 _spec = importlib.util.spec_from_file_location("guardrail", SCRIPT)
 guardrail = importlib.util.module_from_spec(_spec)
@@ -139,9 +140,49 @@ class Precision(unittest.TestCase):
         result, _ = evaluate(REMEDIATED, baseline=BASELINE)
         self.assertEqual(result.findings, [], "the safe version of the change must pass silently")
 
-    def test_split_pipeline_workflows_pass(self):
-        result, _ = evaluate(workflows=os.path.join(ROOT, "solution", "workflow"))
+    def test_installed_github_workflows_pass(self):
+        """The workflows this repo actually runs are held to the rule they enforce."""
+        installed = os.path.join(ROOT, ".github", "workflows")
+        if not os.path.isdir(installed):
+            self.skipTest("no .github/workflows in this checkout")
+        result, _ = evaluate(workflows=installed)
         self.assertEqual(result.findings, [])
+
+
+class Rendering(unittest.TestCase):
+    """What the guardrail checks must be what would actually be applied."""
+
+    def _render(self):
+        proc = subprocess.run([RENDER], capture_output=True, text=True)
+        if proc.returncode == 2 and "need kustomize or kubectl" in proc.stderr:
+            self.skipTest("neither kustomize nor kubectl on PATH")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout
+
+    def test_overlay_renders_to_the_committed_baseline(self):
+        """A stale snapshot would make every diff-aware check compare against fiction."""
+        rendered = self._render()
+        with open(BASELINE, encoding="utf-8") as fh:
+            committed = "".join(line for line in fh if not line.startswith("# "))
+        self.assertEqual(
+            rendered,
+            committed,
+            "tests/fixtures/manifests/baseline-evidence-a.yaml has drifted from "
+            "k8s/overlays/production — regenerate it (see the header in that file)",
+        )
+
+    def test_rendered_overlay_is_clean(self):
+        rendered = self._render()
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as fh:
+            fh.write(rendered)
+            path = fh.name
+        try:
+            result, _ = evaluate(path)
+            self.assertEqual(rules(result, guardrail.BLOCK), [])
+        finally:
+            os.unlink(path)
 
 
 class IndividualRules(unittest.TestCase):

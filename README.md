@@ -22,11 +22,12 @@ Start here:
 | [`runbook.md`](runbook.md) | Rollout flow, pre-merge / pre-deploy validation, rollout checks, rollback triggers and steps, the required cross-functional gate |
 | [`solution/scripts/validate_manifest.py`](solution/scripts/validate_manifest.py) | The guardrail — 9 checks, fails closed, redacts what it finds |
 | [`solution/policy/guardrail.yaml`](solution/policy/guardrail.yaml) | Every threshold, each carrying the evidence that produced it |
-| [`solution/workflow/`](solution/workflow) | The pipeline split: `pr-validate.yml` (no credentials) and `production-apply.yml` (dispatch + protected environment) |
+| [`.github/workflows/`](.github/workflows) | The pipeline split, **installed and running here**: `pr-validate.yml` (no credentials) and `production-apply.yml` (dispatch + protected environment). Rationale in [`solution/workflow/README.md`](solution/workflow/README.md) |
+| [`k8s/`](k8s) | `base/` + `overlays/production/` — a real kustomize overlay, so the render step in CI is genuine |
 | [`solution/schema/change_summary.schema.json`](solution/schema/change_summary.schema.json) | The machine-readable approver summary |
 | [`solution/exceptions/`](solution/exceptions/README.md) | The time-boxed exception mechanism |
 | [`solution/examples/`](solution/examples) | Real output from the commands below, checked in |
-| [`tests/`](tests) | 37 tests: catch tests, precision tests, fail-closed tests |
+| [`tests/`](tests) | 39 tests: catch tests, precision tests, fail-closed tests, render-parity |
 | [`AI_USAGE.md`](AI_USAGE.md) | What the AI produced, what I changed, what I rejected, how each claim was verified |
 
 ---
@@ -58,10 +59,11 @@ Start here:
 
 **Should attempt**
 
-5. **Tests / example failures** — `./validate.sh`, `tests/test_validate.py` (37 tests),
+5. **Tests / example failures** — `./validate.sh`, `tests/test_validate.py` (39 tests),
    `solution/examples/*`.
-6. **Pipeline split** — `solution/workflow/pr-validate.yml` +
-   `production-apply.yml`, replacing the Evidence E workflow.
+6. **Pipeline split** — `.github/workflows/pr-validate.yml` +
+   `production-apply.yml`, replacing the Evidence E workflow. Installed and running in
+   this repository, not merely proposed — see `solution/workflow/README.md`.
 
 **Stretch**
 
@@ -88,20 +90,20 @@ No cluster, no cloud account, no policy-engine binary.
 # the bad change (Evidence B) -> 12 BLOCK, 1 WARN, exit 1
 python3 solution/scripts/validate_manifest.py \
   --manifest tests/fixtures/manifests/proposed-evidence-b.yaml \
-  --baseline k8s/production/deployment.yaml
+  --baseline tests/fixtures/manifests/baseline-evidence-a.yaml
 
 # the existing CI workflow (Evidence E) -> ci-write-from-pr, exit 1
 python3 solution/scripts/validate_manifest.py --workflows tests/fixtures/workflows
 
 # the remediated change -> no findings, exit 0
 python3 solution/scripts/validate_manifest.py \
-  --manifest k8s/production/deployment.remediated.yaml \
-  --baseline k8s/production/deployment.yaml
+  --manifest tests/fixtures/manifests/remediated.yaml \
+  --baseline tests/fixtures/manifests/baseline-evidence-a.yaml
 
 # the approver's summary
 python3 solution/scripts/validate_manifest.py \
   --manifest tests/fixtures/manifests/proposed-evidence-b.yaml \
-  --baseline k8s/production/deployment.yaml --format json | less
+  --baseline tests/fixtures/manifests/baseline-evidence-a.yaml --format json | less
 
 # unit tests only
 python3 -m unittest discover -s tests -v
@@ -136,8 +138,8 @@ files, not admission objects). Longer term this belongs in **both** places: CI f
 feedback, and a Kyverno/Gatekeeper admission policy so the cluster refuses the change
 regardless of how it arrives — CI checks the path you know about.
 
-**Precision is tested, not assumed.** Four of the 37 tests assert that the *current*
-production manifest, the *remediated* change and the *proposed* workflows produce no
+**Precision is tested, not assumed.** Five of the 39 tests assert that the *current*
+production manifest, the *remediated* change and the repo's own workflows produce no
 blocking findings. A guardrail measured only on what it catches scores perfectly by
 flagging everything, and then gets bypassed within a month.
 
@@ -157,7 +159,7 @@ commander to `required_approvals`. Exceptions surface risk to humans; they do no
 ## Assumptions
 
 1. `kustomize build k8s/overlays/production` yields the manifest in
-   `k8s/production/deployment.yaml`. That overlay is not included here — the guardrail
+   `tests/fixtures/manifests/baseline-evidence-a.yaml`. That overlay is not included here — the guardrail
    takes a rendered file, so the render step is orthogonal to it.
 2. `main` is the deployed state, because `production-apply.yml` only applies from `main`.
    That is what makes `origin/main` a valid baseline for diff-aware checks. In a repo with

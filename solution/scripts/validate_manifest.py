@@ -19,7 +19,7 @@ Exit codes
 
 Usage
     validate_manifest.py --manifest k8s/rendered.yaml \
-                         [--baseline k8s/production/deployment.yaml] \
+                         [--baseline baseline.yaml] \
                          [--policy solution/policy/guardrail.yaml] \
                          [--workflows .github/workflows] \
                          [--exceptions solution/exceptions] \

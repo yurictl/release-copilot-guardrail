@@ -8,7 +8,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 V="python3 solution/scripts/validate_manifest.py"
-BASE="k8s/production/deployment.yaml"
+BASE="tests/fixtures/manifests/baseline-evidence-a.yaml"
 rc_total=0
 
 hr() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
@@ -28,7 +28,7 @@ $V --workflows tests/fixtures/workflows
 rc=$?; note "exit code: $rc (expected 1)"; [ "$rc" = 1 ] || rc_total=1
 
 hr "3. The remediated change — must pass"
-$V --manifest k8s/production/deployment.remediated.yaml --baseline "$BASE"
+$V --manifest tests/fixtures/manifests/remediated.yaml --baseline "$BASE"
 rc=$?; note "exit code: $rc (expected 0)"; [ "$rc" = 0 ] || rc_total=1
 
 hr "4. Fail-closed: a render that lost the workload"
