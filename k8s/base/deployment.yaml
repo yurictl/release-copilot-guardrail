@@ -9,12 +9,12 @@ kind: Deployment
 metadata:
   name: inference-gateway
 spec:
-  replicas: 4
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
+      maxUnavailable: 2
+      maxSurge: 0
   selector:
     matchLabels:
       app: inference-gateway
@@ -31,26 +31,25 @@ spec:
               containerPort: 8080
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: http
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /live
+              path: /health
               port: http
             periodSeconds: 10
           resources:
             requests:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "100m"
+              memory: "128Mi"
             limits:
-              cpu: "1"
-              memory: "1Gi"
+              cpu: "500m"
+              memory: "256Mi"
           env:
             - name: MODEL_PROVIDER
               value: "internal"
             - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: inference-gateway-secrets
-                  key: redis_url
+              value: "redis://cache.production.svc.cluster.local:6379"
+            - name: OPENAI_API_KEY
+              value: "sk-test-placeholder"
