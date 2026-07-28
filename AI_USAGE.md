@@ -55,8 +55,8 @@ clean run would be the least useful possible answer.
    weakened to make today's state pass is a rule that will never catch anything.
 7. **Added the precision half of the test suite.** The assistant's first test file was all
    catch tests. That measures recall only, and a policy that flags everything scores 100 %
-   on it. Added the current manifest, the remediated manifest and the proposed workflows
-   as must-not-flag cases.
+   on it. Added the current manifest, the remediated manifest and the repo's own
+   workflows as must-not-flag cases.
 8. **Rewrote the risk analysis to lead with the interaction.** The draft was a list of
    eight independent defects. The actual danger is that they compound — replica cut ×
    surge 0 × cold start × reduced CPU × a probe path that may 404. That paragraph is the
@@ -64,6 +64,17 @@ clean run would be the least useful possible answer.
 9. **Cut the assistant's hedging.** Draft prose said things like "consider possibly
    reducing risk by evaluating whether replicas should perhaps remain at 4". Production
    documents state the decision and the reason.
+10. **Re-scoped the render-parity test after it fired on the wrong thing.** The test
+    compared the committed baseline fixture against the working tree's render, which is
+    correct on `main` and wrong on every PR that touches a manifest — it would have gone
+    red on the legitimate release PR, in the job that is supposed to test the *tool*. It
+    now renders the default branch in a detached worktree. Found by running it, not by
+    reading it: the first CI run on the demo branch is what surfaced it.
+11. **Removed the `paths:` filter from `pr-validate.yml`.** A path-filtered workflow that
+    is also a required status check never reports on the PRs it skips, so a docs-only PR
+    would sit permanently "waiting for status" and the usual remedy is to make the gate
+    optional. An unconditional 30-second job is cheaper than a gate people learn to
+    switch off.
 
 ## What I rejected
 
@@ -96,7 +107,7 @@ clean run would be the least useful possible answer.
 ## How I verified it
 
 - **Executed, not eyeballed.** Every check was run against a fixture that must fail it and
-  a fixture that must pass it: `./validate.sh` and 37 tests, all passing. The Evidence B
+  a fixture that must pass it: `./validate.sh` and 38 tests, all passing. The Evidence B
   numbers in `risk_analysis.md` (12 blocking findings, 0 available pods, −1800m CPU) are
   copied from actual output in `solution/examples/`, not written from expectation.
 - **Fail-closed paths tested explicitly** — malformed YAML, a render missing the workload,
@@ -114,11 +125,16 @@ clean run would be the least useful possible answer.
 
 ### What is *not* verified, stated plainly
 
-- **The GitHub Actions workflows have never run.** No CI environment was available. Their
-  YAML parses and the guardrail invocations inside them were executed locally with the
-  same arguments, but the `kustomize` download, the OIDC role assumption, the
-  `kubectl diff`/`apply` steps and the rollback branch are unexercised. Treat them as a
-  reviewed design, not as tested code.
+- **The cluster-touching steps have never run** — `kubectl diff`, `apply`, the rollout
+  watch, the post-apply health gate and the rollback branch. They need a cluster. Treat
+  those steps as a reviewed design, not as tested code.
+- **Everything else in the pipeline has now run for real.** The workflows are installed in
+  this repository and were exercised end to end: [PR #1](https://github.com/yurictl/release-copilot-guardrail/pull/1) is blocked by the
+  guardrail, [PR #2](https://github.com/yurictl/release-copilot-guardrail/pull/2) passes it, and `production-apply.yml` runs through the
+  environment approval, the ancestor check, the render and both guardrail re-runs before
+  stopping at the unconfigured-cluster boundary. This section previously said the
+  workflows had never executed; that was true when it was written, and running them
+  changed two things — see "What I changed" items 10 and 11.
 - **No cluster behaviour was verified** — by the exercise's own terms, but it bears
   repeating: the guardrail reasons about manifests. It cannot tell you that `/health`
   exists, that 3 replicas is still the right floor at today's traffic, or that `2.5.0`

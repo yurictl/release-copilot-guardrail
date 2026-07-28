@@ -182,21 +182,33 @@ commander to `required_approvals`. Exceptions surface risk to humans; they do no
 
 ## Verification status — what I actually ran
 
+The pipeline is not a proposal in this repo; it runs here. Two demonstration pull
+requests carry the same release through it:
+
+| Evidence | Result |
+|---|---|
+| [PR #1](https://github.com/yurictl/release-copilot-guardrail/pull/1) — the Evidence B change, applied verbatim | **Blocked.** `render + guardrail` fails; the guardrail comments 12 blocking findings, risk 100/100, `reject`. `guardrail self-test` stays green — one red X, for the right reason |
+| [PR #2](https://github.com/yurictl/release-copilot-guardrail/pull/2) — the same release, image bump only | **Passes.** No findings, risk 0/100, `approve` — and the comment still says a human owns the merge |
+| [Actions](https://github.com/yurictl/release-copilot-guardrail/actions) | Both runs, with the rendered manifest and the JSON change summary attached as artifacts |
+
 | Artifact | Status |
 |---|---|
-| `validate_manifest.py` | Executed against 6 manifests and 2 workflow directories; 37 tests pass |
+| `validate_manifest.py` | Executed against 6 manifests and 2 workflow directories; 38 tests pass |
 | Exception logic | Executed for valid / expired / self-approved / under-approved / non-waivable |
 | Fail-closed paths | Executed — exit 2 confirmed for malformed YAML, missing workload, missing baseline, missing workflow dir |
 | Change summary | Generated and checked field-by-field against the JSON schema by test |
-| `solution/workflow/*.yml` | **Not executed** — no CI environment. YAML parses; the guardrail commands inside them were run locally with the same arguments; the `kustomize`/`kubectl`/OIDC steps are unverified |
+| `.github/workflows/pr-validate.yml` | **Executed on real pull requests** — render, both guardrail passes, artifact upload, PR comment, and the enforce step, on a blocking PR and a clean one |
+| `.github/workflows/production-apply.yml` | **Executed** through the environment approval, ancestor check, render and both guardrail re-runs. Stops before the apply: no cluster is configured |
+| `kubectl apply` / rollout watch / rollback steps | **Not executed** — they need a cluster. Reviewed design, unexercised code |
 | Cluster behaviour | **Not verified** — no cluster, per the exercise |
 
 ---
 
 ## Time spent
 
-**≈25 minutes wall clock**, in one AI-assisted session — inside the 45-minute budget,
-including the stretch items. That number is the honest one and it is also the least
+**≈25 minutes** for the deliverables, inside the 45-minute budget and including the
+stretch items; **≈30 minutes more** to make the pipeline real — a kustomize overlay, the
+workflows installed and running, and two demonstration pull requests through them. That number is the honest one and it is also the least
 interesting one: writing this is fast, and *verifying* it is not. Reading every check,
 confirming the Kubernetes semantics behind them, and deciding the thresholds are the right
 thresholds took the larger share of that time and would take a reviewer longer than it took

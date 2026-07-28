@@ -7,13 +7,11 @@
 name: pr-validate
 
 on:
+  # Every pull request, deliberately un-filtered by path. A required status check that
+  # is path-filtered never reports on the PRs it skips, so those PRs sit permanently
+  # "expected — waiting for status" and the usual fix is to make the check optional.
+  # Running an unconditional 30-second job is cheaper than that failure mode.
   pull_request:
-    paths:
-      - "k8s/**"
-      - "solution/**"
-      - "scripts/**"
-      - "tests/**"
-      - ".github/workflows/**"
 
 # Least privilege: enough to comment, nothing that can reach a cluster.
 permissions:

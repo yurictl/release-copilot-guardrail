@@ -11,6 +11,11 @@ running** in this repository:
 A single copy on purpose: a proposal stored next to a diverging implementation is how a
 pipeline ends up documented as safe and configured otherwise.
 
+**Evidence that they work:** [PR #1](https://github.com/yurictl/release-copilot-guardrail/pull/1) carries the Evidence B change and is
+blocked; [PR #2](https://github.com/yurictl/release-copilot-guardrail/pull/2) carries the same release as an image bump and passes. Both
+runs are in [Actions](https://github.com/yurictl/release-copilot-guardrail/actions), with the rendered manifest and the JSON change summary
+attached as artifacts.
+
 ## What Evidence E did, and what changed
 
 ```diff

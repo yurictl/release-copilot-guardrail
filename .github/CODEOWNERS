@@ -1,0 +1,16 @@
+# Who must review what. In this exercise repo there is one collaborator, so required
+# reviews are not enforced in branch protection — the file records the intent that
+# ai_guardrail.md and runbook.md describe, and is what you would turn on in the real
+# service repo.
+
+# The workload itself: the service owner.
+/k8s/                       @yurictl
+
+# The guardrail, its policy and the pipeline: service owner AND someone from the SRE
+# rota. Loosening a threshold is a change to the safety envelope, not a config tweak.
+/solution/policy/           @yurictl
+/solution/scripts/          @yurictl
+/.github/workflows/         @yurictl
+
+# Exception records: never self-approved. See solution/exceptions/README.md.
+/solution/exceptions/       @yurictl
